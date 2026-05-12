@@ -4,15 +4,17 @@ const https = require("https");
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "50mb" }));
+
+// Increase limit for PDF uploads
+app.use(express.json({ limit: "100mb" }));
 
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 
 app.get("/", (req, res) => {
-  res.json({ 
+  res.json({
     status: "Invoice Server running",
     keySet: !!API_KEY,
-    keyPreview: API_KEY ? API_KEY.slice(0,10) + "..." : "NOT SET"
+    keyPreview: API_KEY ? API_KEY.slice(0, 14) + "..." : "NOT SET"
   });
 });
 
@@ -22,7 +24,7 @@ app.post("/api/extract", (req, res) => {
   }
 
   const body = JSON.stringify(req.body);
-  console.log("Sending to Anthropic, body size:", body.length, "model:", req.body.model);
+  console.log("Body size:", body.length, "Model:", req.body.model);
 
   const options = {
     hostname: "api.anthropic.com",
@@ -40,8 +42,8 @@ app.post("/api/extract", (req, res) => {
     let data = "";
     apiRes.on("data", chunk => data += chunk);
     apiRes.on("end", () => {
-      console.log("Anthropic HTTP status:", apiRes.statusCode);
-      console.log("Anthropic response:", data.slice(0, 300));
+      console.log("Anthropic status:", apiRes.statusCode);
+      console.log("Response:", data.slice(0, 300));
       try {
         res.status(apiRes.statusCode).json(JSON.parse(data));
       } catch (e) {
@@ -51,7 +53,7 @@ app.post("/api/extract", (req, res) => {
   });
 
   apiReq.on("error", (e) => {
-    console.log("HTTPS error:", e.message);
+    console.log("Error:", e.message);
     res.status(500).json({ error: e.message });
   });
 
