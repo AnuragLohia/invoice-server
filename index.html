@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Invoice Analyser</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{
+  --bg:#0d0f14;--panel:#13161e;--border:#1e2330;
+  --accent:#f0c040;--accent2:#4af0a0;--accent3:#f05060;
+  --text:#e8eaf0;--muted:#606880;
+  --mono:'Courier New',monospace;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;overflow:hidden;}
+
+/* LAYOUT */
+.app{display:flex;flex-direction:column;height:100vh;}
+.header{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.logo{font-weight:900;font-size:.95rem;letter-spacing:.04em;color:var(--accent);}
+.logo span{color:var(--text);}
+.tab-content{flex:1;overflow:hidden;position:relative;}
+.panel{position:absolute;inset:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;transition:transform .25s,opacity .25s;}
+.panel.hidden{transform:translateX(100%);opacity:0;pointer-events:none;}
+.tab-bar{background:var(--panel);border-top:1px solid var(--border);display:flex;flex-shrink:0;padding-bottom:env(safe-area-inset-bottom,0);}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:10px 0;border:none;background:none;color:var(--muted);font-size:.58rem;font-family:var(--mono);letter-spacing:.05em;cursor:pointer;position:relative;}
+.tab.active{color:var(--accent);}
+.tab-icon{font-size:1.2rem;}
+.badge{position:absolute;top:6px;right:calc(50% - 20px);background:var(--accent3);color:#fff;border-radius:8px;font-size:.5rem;padding:1px 5px;font-family:var(--mono);}
+
+/* API KEY SCREEN */
+.apikey-screen{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px;display:flex;flex-direction:column;gap:12px;}
+.apikey-screen h2{font-size:1rem;font-weight:800;color:var(--accent);}
+.apikey-screen p{font-size:.75rem;color:var(--muted);line-height:1.6;font-family:var(--mono);}
+.apikey-screen a{color:var(--accent2);}
+.api-input{background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:.75rem;padding:10px 12px;outline:none;width:100%;}
+.api-input:focus{border-color:var(--accent);}
+
+/* BUTTONS */
+.btn{font-family:var(--mono);font-size:.75rem;font-weight:700;padding:13px 18px;border-radius:4px;border:none;cursor:pointer;letter-spacing:.04em;transition:opacity .15s,transform .1s;display:inline-flex;align-items:center;justify-content:center;gap:6px;}
+.btn:active{transform:scale(.96);}
+.btn:disabled{opacity:.35;pointer-events:none;}
+.btn-accent{background:var(--accent);color:#0d0f14;width:100%;}
+.btn-green{background:var(--accent2);color:#0d0f14;}
+.btn-ghost{background:var(--border);color:var(--muted);}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+
+/* UPLOAD */
+.upload-box{background:var(--panel);border:2px dashed var(--border);border-radius:8px;padding:28px 16px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px;}
+.upload-box h3{font-size:1rem;font-weight:800;}
+.upload-box p{font-size:.7rem;color:var(--muted);font-family:var(--mono);}
+
+/* PROGRESS */
+.progress-wrap{background:var(--border);border-radius:2px;height:4px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--accent);transition:width .3s;width:0%;}
+
+/* LOG */
+.log-box{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:10px;max-height:120px;overflow-y:auto;font-family:var(--mono);font-size:.65rem;}
+.log-ok{color:var(--accent2);}.log-err{color:var(--accent3);}.log-info{color:var(--accent);}
+
+/* STATS */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:10px 12px;}
+.stat-label{font-family:var(--mono);font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+.stat-val{font-size:.95rem;font-weight:900;}
+
+/* FILTERS */
+.filters{display:flex;gap:6px;flex-wrap:wrap;}
+.fbtn{font-family:var(--mono);font-size:.63rem;padding:6px 12px;border-radius:2px;border:1px solid var(--border);background:var(--panel);color:var(--muted);cursor:pointer;}
+.fbtn.active{border-color:var(--accent);color:var(--accent);}
+
+/* TABLE */
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:4px;-webkit-overflow-scrolling:touch;}
+table{width:100%;border-collapse:collapse;font-size:.68rem;}
+thead{background:#0a0c10;position:sticky;top:0;z-index:1;}
+th{font-family:var(--mono);padding:8px 10px;color:var(--muted);text-align:left;font-size:.58rem;border-bottom:1px solid var(--border);white-space:nowrap;text-transform:uppercase;}
+td{padding:7px 10px;border-bottom:1px solid var(--border);font-family:var(--mono);vertical-align:top;}
+.tag{font-size:.56rem;padding:2px 5px;border-radius:2px;font-weight:700;white-space:nowrap;}
+.tag-igst{background:#1e3a5f;color:#6ab0ff;}
+.tag-cs{background:#2a1e3a;color:#c08af0;}
+.tag-none{background:var(--border);color:var(--muted);}
+.empty{text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:.72rem;}
+
+/* CHAT */
+.chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;}
+.chat-empty{text-align:center;padding:30px 12px;color:var(--muted);font-family:var(--mono);font-size:.7rem;line-height:2;}
+.bubble-label{font-size:.58rem;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;}
+.bubble{border-radius:4px;padding:9px 12px;font-family:var(--mono);font-size:.72rem;line-height:1.6;}
+.bubble.user{background:var(--border);color:var(--text);border-radius:4px 4px 0 4px;margin-left:24px;}
+.bubble.ai{background:#0a1a12;border:1px solid #1e3a2a;color:var(--accent2);border-radius:4px 4px 4px 0;}
+.bubble.err{background:#1a0a0a;border:1px solid #3a1e1e;color:var(--accent3);}
+.chips{padding:8px 12px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:5px;flex-shrink:0;}
+.chip{font-family:var(--mono);font-size:.6rem;padding:5px 9px;border-radius:2px;border:1px solid var(--border);background:var(--bg);color:var(--muted);cursor:pointer;white-space:nowrap;}
+.chat-input-row{padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0;padding-bottom:max(10px,env(safe-area-inset-bottom));}
+.chat-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:16px;padding:9px 11px;outline:none;resize:none;height:48px;}
+.chat-input:focus{border-color:var(--accent);}
+.send-btn{background:var(--accent);color:#0d0f14;border:none;border-radius:4px;font-family:var(--mono);font-weight:700;font-size:.72rem;padding:0 14px;cursor:pointer;}
+.send-btn:disabled{opacity:.35;}
+.dl-btn{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;padding:9px;border-radius:3px;background:#1e3a10;border:1px solid #3a6020;color:var(--accent2);font-family:var(--mono);font-size:.66rem;font-weight:700;cursor:pointer;width:100%;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo">INVOICE<span>ANALYSER</span></div>
+    <div style="font-family:var(--mono);font-size:.6rem;color:var(--muted);" id="apiStatus">🔴 No API Key</div>
+  </div>
+
+  <div class="tab-content">
+    <!-- INVOICES PANEL -->
+    <div class="panel" id="panelInvoices">
+
+      <!-- API KEY SETUP -->
+      <div class="apikey-screen" id="apiKeyScreen">
+        <h2>🔑 Enter API Key</h2>
+        <p>This app calls the Anthropic API to read your invoices.<br>Get your free key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a></p>
+        <input class="api-input" type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." autocomplete="off" />
+        <button class="btn btn-accent" onclick="saveApiKey()">Save & Continue</button>
+        <p style="font-size:.62rem;color:var(--muted);">Key is saved only in this browser tab. Never shared.</p>
+      </div>
+
+      <!-- UPLOAD (shown after API key set) -->
+      <div id="mainContent" style="display:none;flex-direction:column;gap:14px;">
+        <div class="upload-box">
+          <div style="font-size:1.8rem;">📄</div>
+          <h3>Select Your Invoices</h3>
+          <p>PDF files and photos of invoices</p>
+          <!-- This label trick is the most reliable mobile file picker -->
+          <label for="fileInput" class="btn btn-accent" style="cursor:pointer;margin:0;">
+            📂 &nbsp;Browse &amp; Select Files
+          </label>
+          <input type="file" id="fileInput" accept=".pdf,image/*" multiple style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;" />
+          <p id="queueInfo" style="color:var(--accent2);">No files selected</p>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-accent" style="flex:1;" id="processBtn" disabled onclick="processAll()">⚡ Extract All</button>
+          <button class="btn btn-green" id="exportBtn" disabled onclick="exportCSV()">↓ CSV</button>
+          <button class="btn btn-ghost" onclick="clearAll()">✕</button>
+        </div>
+
+        <div class="progress-wrap" id="progressWrap" style="display:none;">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="log-box" id="logBox" style="display:none;"></div>
+
+        <div id="statsWrap" style="display:none;">
+          <div class="stats">
+            <div class="stat"><div class="stat-label">Invoices</div><div class="stat-val" style="color:var(--text)" id="sCount">0</div></div>
+            <div class="stat"><div class="stat-label">Total ₹</div><div class="stat-val" id="sTotal">—</div></div>
+            <div class="stat"><div class="stat-label">IGST ₹</div><div class="stat-val" style="color:#6ab0ff" id="sIgst">—</div></div>
+            <div class="stat"><div class="stat-label">CGST ₹</div><div class="stat-val" style="color:var(--accent2)" id="sCgst">—</div></div>
+            <div class="stat"><div class="stat-label">SGST ₹</div><div class="stat-val" style="color:#f0a050" id="sSgst">—</div></div>
+            <div class="stat"><div class="stat-label">Transport ₹</div><div class="stat-val" style="color:#f0a050" id="sTransport">—</div></div>
+            <div class="stat"><div class="stat-label">Taxable ₹</div><div class="stat-val" style="color:var(--accent2)" id="sTaxable">—</div></div>
+            <div class="stat"><div class="stat-label">Vendors</div><div class="stat-val" style="color:var(--text)" id="sVendors">—</div></div>
+          </div>
+        </div>
+
+        <div class="filters" id="filterBar" style="display:none;">
+          <button class="fbtn active" onclick="setFilter('all',this)">All</button>
+          <button class="fbtn" onclick="setFilter('igst',this)">IGST</button>
+          <button class="fbtn" onclick="setFilter('cgst',this)">CGST+SGST</button>
+          <button class="fbtn" onclick="setFilter('transport',this)">Transport</button>
+        </div>
+
+        <div class="table-wrap" id="tableWrap">
+          <table><tbody><tr><td class="empty">Upload invoices to begin</td></tr></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHAT PANEL -->
+    <div class="panel hidden" id="panelChat" style="padding:0;">
+      <div class="chat-msgs" id="chatMsgs">
+        <div class="chat-empty" id="chatEmpty">Extract invoices first,<br>then ask me anything.<br><br>"Top 5 vendors by spend"<br>"Ply material invoices"<br>"Total IGST paid"</div>
+      </div>
+      <div class="chips">
+        <span class="chip" onclick="fillChat('Who are my top 5 vendors by total spend?')">Top 5 vendors</span>
+        <span class="chip" onclick="fillChat('Which invoices contain ply or plywood?')">Ply material</span>
+        <span class="chip" onclick="fillChat('Total IGST, CGST and SGST paid?')">Tax summary</span>
+        <span class="chip" onclick="fillChat('Which invoices have transport charges?')">Transport</span>
+        <span class="chip" onclick="fillChat('Highest value invoice?')">Highest invoice</span>
+        <span class="chip" onclick="fillChat('Monthly spend breakdown')">Monthly</span>
+      </div>
+      <div class="chat-input-row">
+        <textarea class="chat-input" id="chatInput" placeholder="Ask about your invoices..." rows="1"></textarea>
+        <button class="send-btn" id="sendBtn" disabled onclick="sendChat()">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab active" id="tabInv" onclick="switchTab('invoices')">
+      <span class="tab-icon">📄</span>INVOICES
+    </button>
+    <button class="tab" id="tabChat" onclick="switchTab('chat')">
+      <span class="tab-icon">💬</span>AI CHAT
+      <span class="badge" id="chatBadge" style="display:none">NEW</span>
+    </button>
+  </div>
+</div>
+
+<script>
+let API_KEY = "";
+let fileQueue = [], results = [], chatHistory = [], activeFilter = "all";
+const MODEL = "claude-sonnet-4-20250514";
+
+// Init
+window.onload = () => {
+  showMain();
+  document.getElementById("fileInput").addEventListener("change", onFilesSelected);
+};
+
+function saveApiKey() {
+  const k = document.getElementById("apiKeyInput").value.trim();
+  if (!k.startsWith("sk-")) return alert("Please enter a valid Anthropic API key (starts with sk-ant-)");
+  API_KEY = k;
+  localStorage.setItem("inv_api_key", k);
+  showMain();
+}
+
+function showMain() {
+  document.getElementById("apiKeyScreen").style.display = "none";
+  const mc = document.getElementById("mainContent");
+  mc.style.display = "flex";
+  document.getElementById("apiStatus").textContent = "🟢 API Key Set";
+}
+
+// Tab switching
+function switchTab(tab) {
+  const inv = document.getElementById("panelInvoices");
+  const chat = document.getElementById("panelChat");
+  const tI = document.getElementById("tabInv");
+  const tC = document.getElementById("tabChat");
+  if (tab === "invoices") {
+    inv.classList.remove("hidden"); chat.classList.add("hidden");
+    tI.classList.add("active"); tC.classList.remove("active");
+  } else {
+    chat.classList.remove("hidden"); inv.classList.add("hidden");
+    tC.classList.add("active"); tI.classList.remove("active");
+    document.getElementById("chatBadge").style.display = "none";
+    document.getElementById("chatMsgs").scrollTop = 99999;
+  }
+}
+
+// File selection
+function onFilesSelected(e) {
+  const files = [...e.target.files].filter(f => f.type === "application/pdf" || f.type.startsWith("image/"));
+  fileQueue.push(...files);
+  document.getElementById("queueInfo").textContent = fileQueue.length + " file(s) selected";
+  document.getElementById("processBtn").disabled = fileQueue.length === 0;
+}
+
+function clearAll() {
+  fileQueue = []; results = []; chatHistory = [];
+  document.getElementById("fileInput").value = "";
+  document.getElementById("queueInfo").textContent = "No files selected";
+  document.getElementById("processBtn").disabled = true;
+  document.getElementById("exportBtn").disabled = true;
+  document.getElementById("sendBtn").disabled = true;
+  document.getElementById("progressWrap").style.display = "none";
+  document.getElementById("logBox").style.display = "none";
+  document.getElementById("logBox").innerHTML = "";
+  document.getElementById("statsWrap").style.display = "none";
+  document.getElementById("filterBar").style.display = "none";
+  document.getElementById("tableWrap").innerHTML = '<table><tbody><tr><td class="empty">Upload invoices to begin</td></tr></tbody></table>';
+  document.getElementById("chatMsgs").innerHTML = '<div class="chat-empty" id="chatEmpty">Extract invoices first,<br>then ask me anything.</div>';
+  document.getElementById("chatBadge").style.display = "none";
+}
+
+// Logging
+function log(msg, type) {
+  const lb = document.getElementById("logBox");
+  lb.style.display = "block";
+  lb.innerHTML += `<div class="log-${type||'info'}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+  lb.scrollTop = lb.scrollHeight;
+}
+
+// Base64
+function toBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader(); r.onload = () => res(r.result.split(",")[1]); r.onerror = rej; r.readAsDataURL(file);
+  });
+}
+
+// Extract invoice
+async function extractInvoice(file) {
+  const b64 = await toBase64(file);
+  const isPdf = file.type === "application/pdf";
+  const block = isPdf
+    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } }
+    : { type: "image", source: { type: "base64", media_type: file.type || "image/jpeg", data: b64 } };
+  const prompt = `Expert Indian GST invoice parser. Return ONLY valid JSON, no markdown.
+{"invoice_no":"","invoice_date":"","vendor_name":"","vendor_city":"","vendor_address":"","vendor_gstin":"","items":[{"description":"","hsn":"","qty":"","unit":"","rate":0,"amount":0,"is_transport":false}],"transport_amount":0,"taxable_value":0,"igst_amount":0,"cgst_amount":0,"sgst_amount":0,"total_amount":0,"tax_type":"IGST or CGST+SGST or NONE"}
+Rules: vendor_city=city name only; vendor_address=supplier full address; is_transport=true for cartage/freight lines; all numeric fields must be numbers not strings; tax_type: IGST if only IGST present, CGST+SGST if both, NONE if no tax.`;
+  const resp = await fetch("https://YOUR-APP-NAME.onrender.com/api/extract", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: MODEL, max_tokens: 1000, messages: [{ role: "user", content: [block, { type: "text", text: prompt }] }] })
+  });
+  if (!resp.ok) throw new Error("API " + resp.status + " - check your API key");
+  const data = await resp.json();
+  return JSON.parse(data.content.map(i => i.text || "").join("").replace(/```json|```/g, "").trim());
+}
+
+// Process all
+async function processAll() {
+  if (!fileQueue.length) return;
+  document.getElementById("processBtn").disabled = true;
+  document.getElementById("progressWrap").style.display = "block";
+  results = [];
+  renderTable();
+
+  for (let i = 0; i < fileQueue.length; i++) {
+    const f = fileQueue[i];
+    document.getElementById("progressFill").style.width = Math.round((i / fileQueue.length) * 100) + "%";
+    log(`[${i+1}/${fileQueue.length}] ${f.name}`, "info");
+    try {
+      const d = await extractInvoice(f);
+      d._file = f.name; d._status = "ok";
+      results.push(d);
+      log(`✓ ${d.vendor_name || "?"} · ₹${d.total_amount}`, "ok");
+    } catch(e) {
+      results.push({ _file: f.name, _status: "err", vendor_name: "ERROR", total_amount: 0, items: [], tax_type: "NONE" });
+      log(`✗ ${f.name}: ${e.message}`, "err");
+    }
+    renderTable(); updateStats();
+  }
+
+  document.getElementById("progressFill").style.width = "100%";
+  log(`Done. ${results.length} invoices processed.`, "ok");
+  document.getElementById("processBtn").disabled = false;
+  document.getElementById("exportBtn").disabled = false;
+  document.getElementById("sendBtn").disabled = false;
+  document.getElementById("statsWrap").style.display = "block";
+  document.getElementById("filterBar").style.display = "flex";
+  document.getElementById("chatBadge").style.display = "block";
+}
+
+// Format
+function fmt(n) {
+  const v = parseFloat(n);
+  if ((!n && n !== 0) || isNaN(v) || v === 0) return "—";
+  return "₹" + v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Filter
+function setFilter(f, el) {
+  activeFilter = f;
+  document.querySelectorAll(".fbtn").forEach(b => b.classList.remove("active"));
+  el.classList.add("active");
+  renderTable();
+}
+
+// Render table
+function renderTable() {
+  let rows = results;
+  if (activeFilter === "igst") rows = results.filter(r => r.tax_type === "IGST");
+  else if (activeFilter === "cgst") rows = results.filter(r => r.tax_type === "CGST+SGST");
+  else if (activeFilter === "transport") rows = results.filter(r => parseFloat(r.transport_amount) > 0);
+
+  if (!rows.length) {
+    document.getElementById("tableWrap").innerHTML = '<table><tbody><tr><td class="empty">' + (results.length ? "No results for this filter" : "Upload invoices to begin") + '</td></tr></tbody></table>';
+    return;
+  }
+  let html = `<table><thead><tr>
+    <th>#</th><th>Invoice</th><th>Date</th><th>Vendor</th><th>City</th><th>Items</th>
+    <th>Transport</th><th>Taxable</th><th>IGST</th><th>CGST</th><th>SGST</th><th>Tax</th><th>Total</th>
+  </tr></thead><tbody>`;
+  rows.forEach((r, i) => {
+    const tag = r.tax_type === "IGST" ? `<span class="tag tag-igst">IGST</span>`
+      : r.tax_type === "CGST+SGST" ? `<span class="tag tag-cs">CGST+SGST</span>`
+      : `<span class="tag tag-none">NONE</span>`;
+    const items = (r.items || []).map(it =>
+      `<div style="padding:1px 0;color:${it.is_transport ? "#f0a050" : "inherit"}">${it.is_transport ? "🚛 " : ""}${it.description || ""}${it.amount ? " " + fmt(it.amount) : ""}</div>`
+    ).join("") || "—";
+    html += `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td style="color:var(--accent);white-space:nowrap">${r.invoice_no || "—"}</td>
+      <td style="white-space:nowrap">${r.invoice_date || "—"}</td>
+      <td style="font-weight:700;min-width:100px">${r.vendor_name || "—"}</td>
+      <td style="color:var(--accent2);white-space:nowrap">${r.vendor_city || "—"}</td>
+      <td style="min-width:160px">${items}</td>
+      <td style="color:#f0a050">${fmt(r.transport_amount)}</td>
+      <td>${fmt(r.taxable_value)}</td>
+      <td style="color:#6ab0ff">${fmt(r.igst_amount)}</td>
+      <td style="color:var(--accent2)">${fmt(r.cgst_amount)}</td>
+      <td style="color:#f0a050">${fmt(r.sgst_amount)}</td>
+      <td>${tag}</td>
+      <td style="color:var(--accent);font-weight:700">${fmt(r.total_amount)}</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  document.getElementById("tableWrap").innerHTML = html;
+}
+
+// Stats
+function updateStats() {
+  const ok = results.filter(r => r._status === "ok");
+  const sum = k => ok.reduce((a, r) => a + (parseFloat(r[k]) || 0), 0);
+  document.getElementById("sCount").textContent = results.length;
+  document.getElementById("sTotal").textContent = "₹" + sum("total_amount").toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  document.getElementById("sIgst").textContent = "₹" + sum("igst_amount").toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  document.getElementById("sCgst").textContent = "₹" + sum("cgst_amount").toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  document.getElementById("sSgst").textContent = "₹" + sum("sgst_amount").toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  document.getElementById("sTransport").textContent = "₹" + sum("transport_amount").toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  document.getElementById("sTaxable").textContent = "₹" + sum("taxable_value").toLocaleString("en-IN", { maximumFractionDigits: 0 });
+  document.getElementById("sVendors").textContent = new Set(ok.map(r => r.vendor_name).filter(Boolean)).size;
+}
+
+// CSV export
+function exportCSV() {
+  const h = ["File","Invoice No","Date","Vendor","City","Address","GSTIN","Transport(₹)","Taxable(₹)","IGST(₹)","CGST(₹)","SGST(₹)","Tax Type","Total(₹)"];
+  const rows = results.map(r => [r._file,r.invoice_no,r.invoice_date,r.vendor_name,r.vendor_city,r.vendor_address,r.vendor_gstin,r.transport_amount||0,r.taxable_value||0,r.igst_amount||0,r.cgst_amount||0,r.sgst_amount||0,r.tax_type,r.total_amount||0]);
+  const csv = [h,...rows].map(row => row.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download = "invoices_" + new Date().toISOString().slice(0,10) + ".csv"; a.click();
+}
+
+// Chat
+function fillChat(t) { document.getElementById("chatInput").value = t; }
+
+function exportSubsetCSV(subset, question) {
+  const h = ["File","Invoice No","Date","Vendor","City","Address","GSTIN","Transport(₹)","Taxable(₹)","IGST(₹)","CGST(₹)","SGST(₹)","Tax Type","Total(₹)"];
+  const rows = subset.map(r => [r._file,r.invoice_no,r.invoice_date,r.vendor_name,r.vendor_city,r.vendor_address,r.vendor_gstin,r.transport_amount||0,r.taxable_value||0,r.igst_amount||0,r.cgst_amount||0,r.sgst_amount||0,r.tax_type,r.total_amount||0]);
+  const csv = [h,...rows].map(row => row.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+  a.download = "backup_" + (question||"query").replace(/[^a-z0-9]/gi,"_").slice(0,25) + ".csv"; a.click();
+}
+
+async function sendChat() {
+  const q = document.getElementById("chatInput").value.trim();
+  if (!q || !results.length) return;
+  document.getElementById("chatInput").value = "";
+  document.getElementById("sendBtn").disabled = true;
+
+  const msgs = document.getElementById("chatMsgs");
+  const empty = document.getElementById("chatEmpty");
+  if (empty) empty.remove();
+
+  // User bubble
+  const ub = document.createElement("div");
+  ub.innerHTML = `<div class="bubble-label">You</div><div class="bubble user">${q.replace(/</g,"&lt;")}</div>`;
+  msgs.appendChild(ub);
+
+  // Typing
+  const tb = document.createElement("div"); tb.id = "typing";
+  tb.innerHTML = `<div class="bubble-label">AI</div><div class="bubble ai">Analysing...</div>`;
+  msgs.appendChild(tb); msgs.scrollTop = 99999;
+
+  const ok = results.filter(r => r._status === "ok");
+  const data = ok.map((r,i) => ({
+    i, file: r._file, inv: r.invoice_no, date: r.invoice_date,
+    vendor: r.vendor_name, city: r.vendor_city,
+    items: (r.items||[]).map(it => ({ d: it.description, amt: it.amount, tr: it.is_transport })),
+    transport: r.transport_amount, taxable: r.taxable_value,
+    igst: r.igst_amount, cgst: r.cgst_amount, sgst: r.sgst_amount,
+    tax_type: r.tax_type, total: r.total_amount
+  }));
+
+  const sys = `You are an invoice analyst. Answer questions based on the invoice data.
+Return ONLY valid JSON: {"answer":"text with \\n for newlines","subset_indices":[0,1,2]}
+subset_indices = indices of invoices relevant to this answer (for CSV backup).`;
+
+  chatHistory.push({ role: "user", content: `Invoices (${data.length}):\n${JSON.stringify(data)}\n\nQuestion: ${q}` });
+
+  try {
+    const resp = await fetch("https://YOUR-APP-NAME.onrender.com/api/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: MODEL, max_tokens: 1000, system: sys, messages: chatHistory })
+    });
+    if (!resp.ok) throw new Error("API " + resp.status);
+    const res = await resp.json();
+    const raw = res.content.map(i => i.text || "").join("").replace(/```json|```/g,"").trim();
+    let parsed; try { parsed = JSON.parse(raw); } catch { parsed = { answer: raw, subset_indices: [] }; }
+    chatHistory.push({ role: "assistant", content: raw });
+
+    const subset = (parsed.subset_indices || []).map(idx => ok[idx]).filter(Boolean);
+    document.getElementById("typing")?.remove();
+
+    const ab = document.createElement("div");
+    let inner = `<div class="bubble-label">AI</div><div class="bubble ai">${(parsed.answer||"").replace(/\n/g,"<br>")}`;
+    if (subset.length) {
+      inner += `<button class="dl-btn" onclick='exportSubsetCSV(window._lastSubset,"${q.replace(/'/g,"")}")'>📊 Download CSV · ${subset.length} invoice${subset.length>1?"s":""}</button>`;
+      window._lastSubset = subset;
+    }
+    inner += `</div>`;
+    ab.innerHTML = inner;
+    msgs.appendChild(ab);
+  } catch(e) {
+    document.getElementById("typing")?.remove();
+    const eb = document.createElement("div");
+    eb.innerHTML = `<div class="bubble-label">AI</div><div class="bubble err">Error: ${e.message}</div>`;
+    msgs.appendChild(eb);
+  }
+  msgs.scrollTop = 99999;
+  document.getElementById("sendBtn").disabled = false;
+}
+
+document.getElementById("chatInput")?.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+</script>
+</body>
+</html>
