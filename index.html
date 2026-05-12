@@ -295,7 +295,7 @@ async function extractInvoice(file) {
   const prompt = `Expert Indian GST invoice parser. Return ONLY valid JSON, no markdown.
 {"invoice_no":"","invoice_date":"","vendor_name":"","vendor_city":"","vendor_address":"","vendor_gstin":"","items":[{"description":"","hsn":"","qty":"","unit":"","rate":0,"amount":0,"is_transport":false}],"transport_amount":0,"taxable_value":0,"igst_amount":0,"cgst_amount":0,"sgst_amount":0,"total_amount":0,"tax_type":"IGST or CGST+SGST or NONE"}
 Rules: vendor_city=city name only; vendor_address=supplier full address; is_transport=true for cartage/freight lines; all numeric fields must be numbers not strings; tax_type: IGST if only IGST present, CGST+SGST if both, NONE if no tax.`;
-  const resp = await fetch("https://YOUR-APP-NAME.onrender.com/api/extract", {
+  const resp = await fetch("https://invoice-server-b70j.onrender.com/api/extract", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: MODEL, max_tokens: 1000, messages: [{ role: "user", content: [block, { type: "text", text: prompt }] }] })
@@ -467,7 +467,7 @@ subset_indices = indices of invoices relevant to this answer (for CSV backup).`;
   chatHistory.push({ role: "user", content: `Invoices (${data.length}):\n${JSON.stringify(data)}\n\nQuestion: ${q}` });
 
   try {
-    const resp = await fetch("https://YOUR-APP-NAME.onrender.com/api/extract", {
+    const resp = await fetch("https://invoice-server-b70j.onrender.com/api/extract", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: MODEL, max_tokens: 1000, system: sys, messages: chatHistory })
